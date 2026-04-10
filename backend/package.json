@@ -1,0 +1,16 @@
+{
+  "name": "polymarket-mobile-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "listen": "node listener.js"
+  },
+  "dependencies": {
+    "@polymarket/clob-client": "^6.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "ethers": "5.8.0",
+    "express": "^4.21.2"
+  }
+}

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Polymarket 跟单控制台</title>
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="description" content="可安装到手机桌面的 Polymarket 跟单控制台" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./assets/icon-192.png" />
+  <style>
+    :root{--bg:#08111f;--panel:#10192b;--line:#24375f;--text:#eef3ff;--muted:#9db0d2;--btn:#245ece;--ok:#1ea76a;--warn:#c68a18;--bad:#bb4c4c}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#08111f,#0c1527);color:var(--text);font-family:Inter,system-ui,"Microsoft YaHei",sans-serif}
+    .wrap{max-width:1380px;margin:0 auto;padding:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:14px;box-shadow:0 10px 24px rgba(0,0,0,.18)}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}.row2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media(max-width:1000px){.grid,.row2{grid-template-columns:1fr}}
+    h1,h2,h3{margin:0 0 10px}.small{font-size:12px;color:var(--muted)}
+    input,select,textarea{width:100%;background:#0b1426;color:#fff;border:1px solid #315083;border-radius:12px;padding:10px 12px}
+    textarea{min-height:120px;resize:vertical}button{padding:10px 14px;border:none;border-radius:12px;background:var(--btn);color:#fff;font-weight:700;cursor:pointer}
+    button.ok{background:var(--ok)} button.warn{background:var(--warn)} button.bad{background:var(--bad)} button.secondary{background:#1a2b50}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}.metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}@media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,1fr)}}
+    .metric{background:#0b1426;border:1px solid var(--line);border-radius:16px;padding:12px}.metric .v{font-size:24px;font-weight:800}
+    table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}th{font-size:12px;color:#cfdbff}
+    .feed{max-height:620px;overflow:auto}.item{padding:10px 4px;border-bottom:1px solid var(--line)}.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:12px}.mono{font-family:ui-monospace,Consolas,monospace;word-break:break-all}
+    .conn-bar{display:flex;gap:8px;align-items:center}.conn-bar input{flex:1}.conn-dot{width:10px;height:10px;border-radius:50%;background:#555;flex-shrink:0;transition:background .3s}
+    .conn-dot.ok{background:var(--ok)}.conn-dot.bad{background:var(--bad)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Polymarket 跟单控制台</h1>
+    <div class="small" style="margin-bottom:10px">上传到 GitHub Pages 后，可用 Chrome 安装到手机桌面。先输入你的机器人后端地址，再点击连接。</div>
+    <div class="conn-bar">
+      <div class="conn-dot" id="connDot"></div>
+      <input id="serverUrl" type="text" placeholder="https://你的后端域名 或 http://你的IP:8787" />
+      <button class="ok" onclick="connect()">连接</button>
+      <button class="secondary" onclick="reloadAll()">刷新</button>
+      <button class="secondary" id="installBtn" style="display:none">安装到手机</button>
+      <button class="bad" onclick="resetRemoteState()">清空状态</button>
+    </div>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric"><div class="small">后端状态</div><div class="v" id="mHealth">未连接</div></div>
+    <div class="metric"><div class="small">模式</div><div class="v" id="mMode">-</div></div>
+    <div class="metric"><div class="small">收到信号</div><div class="v" id="mReceived">0</div></div>
+    <div class="metric"><div class="small">已执行</div><div class="v" id="mExecuted">0</div></div>
+    <div class="metric"><div class="small">待执行</div><div class="v" id="mPending">0</div></div>
+  </div>
+
+  <div class="grid" style="margin-top:14px">
+    <div class="card">
+      <h2>机器人配置</h2>
+      <div class="row2">
+        <div><label class="small">模式</label><select id="mode"><option value="manual">手动</option><option value="semi">半自动</option><option value="auto">自动</option></select></div>
+        <div><label class="small">基础比例</label><input id="copy_ratio" type="number" step="0.01" /></div>
+        <div><label class="small">单笔上限</label><input id="max_per_trade" type="number" /></div>
+        <div><label class="small">单市场上限</label><input id="max_per_market" type="number" /></div>
+        <div><label class="small">每日上限</label><input id="daily_cap" type="number" /></div>
+        <div><label class="small">最小源交易金额</label><input id="min_source_trade" type="number" /></div>
+      </div>
+      <div class="toolbar" style="margin-top:12px"><button class="ok" onclick="saveRemoteConfig()">保存配置</button></div>
+    </div>
+    <div class="card">
+      <h2>交易员名单</h2>
+      <table><thead><tr><th>启用</th><th>交易员</th><th>比例</th><th>单笔上限</th></tr></thead><tbody id="tradersTable"></tbody></table>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>实时交易流</h2><div id="feed" class="feed"></div></div>
+    <div class="card">
+      <h2>测试信号发送</h2>
+      <textarea id="signalBox">{
+  "traderAddress":"0x033dc6e3e3e0a3ae55402576990392ae910aaf05",
+  "traderName":"GUHHH",
+  "marketSlug":"will-movie-x-open-above-50m",
+  "positionSide":"NO",
+  "price":0.84,
+  "amount":900,
+  "action":"BUY",
+  "source":"dashboard-test"
+}</textarea>
+      <div class="toolbar" style="margin-top:10px"><button onclick="sendSignal()">发送测试信号</button></div>
+      <pre id="signalOut" class="small" style="white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>待执行订单</h2><table><thead><tr><th>#</th><th>交易员</th><th>市场</th><th>方向</th><th>金额</th><th>操作</th></tr></thead><tbody id="pendingTable"></tbody></table></div>
+    <div class="card"><h2>最近执行</h2><table><thead><tr><th>交易员</th><th>市场</th><th>方向</th><th>金额</th><th>时间</th></tr></thead><tbody id="executedTable"></tbody></table></div>
+  </div>
+
+  <div class="card"><h2>拒绝记录</h2><table><thead><tr><th>交易员</th><th>市场</th><th>原因</th><th>时间</th></tr></thead><tbody id="rejectedTable"></tbody></table></div>
+</div>
+
+<script>
+let remoteConfig = null;
+let BASE = localStorage.getItem("polybot_url") || "";
+let autoTimer = null;
+let deferredPrompt = null;
+
+document.getElementById("serverUrl").value = BASE;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById("installBtn").style.display = "inline-block";
+});
+document.getElementById("installBtn").addEventListener("click", async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById("installBtn").style.display = "none";
+});
+
+function connect() {
+  BASE = document.getElementById("serverUrl").value.replace(/\/$/, "");
+  localStorage.setItem("polybot_url", BASE);
+  if (autoTimer) clearInterval(autoTimer);
+  reloadAll();
+  autoTimer = setInterval(reloadAll, 5000);
+}
+
+async function api(path, opts) {
+  const res = await fetch(BASE + path, opts);
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return text; }
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function dt(v) { try { return new Date(v).toLocaleString(); } catch { return v || ""; } }
+function setConnDot(ok) { document.getElementById("connDot").className = "conn-dot " + (ok ? "ok" : "bad"); }
+
+const traderNameMap = {
+  "Mujurry": "Mujurry（科技）",
+  "Big.Chungus": "Big.Chungus（文化）",
+  "GUHHH": "GUHHH（文化）",
+  "BeN": "BeN（文化）",
+  "pol76": "pol76（文化）",
+  "middleoftheocean": "middleoftheocean（体育）",
+  "TheRedChip": "TheRedChip（文化）",
+  "CKW": "CKW（体育）",
+  "ewelmealt": "ewelmealt（体育）",
+  "EFFICIENCYEXPERT": "EFFICIENCYEXPERT（体育）",
+  "synnet": "synnet（体育）"
+};
+function zhName(name){ return traderNameMap[name] || name; }
+
+function fillRemoteConfig(cfg) {
+  remoteConfig = cfg;
+  document.getElementById("mode").value = cfg.mode || "manual";
+  document.getElementById("copy_ratio").value = cfg.global?.copy_ratio ?? 0.18;
+  document.getElementById("max_per_trade").value = cfg.global?.max_per_trade ?? 150;
+  document.getElementById("max_per_market").value = cfg.global?.max_per_market ?? 300;
+  document.getElementById("daily_cap").value = cfg.global?.daily_cap ?? 500;
+  document.getElementById("min_source_trade").value = cfg.global?.min_source_trade ?? 200;
+  document.getElementById("tradersTable").innerHTML = (cfg.traders || []).map((t, i) => `
+    <tr>
+      <td><input class="trEnabled" data-i="${i}" type="checkbox" ${t.enabled ? "checked" : ""}></td>
+      <td><strong>${esc(t.labelZh || zhName(t.name || ""))}</strong><div class="small mono">${esc(t.address || "")}</div></td>
+      <td><input class="trRatio" data-i="${i}" type="number" step="0.01" value="${t.copy_ratio ?? 0}"></td>
+      <td><input class="trMax" data-i="${i}" type="number" value="${t.max_per_trade ?? 0}"></td>
+    </tr>`).join("");
+}
+
+function collectRemoteConfig() {
+  const cfg = structuredClone(remoteConfig);
+  cfg.mode = document.getElementById("mode").value;
+  cfg.global = cfg.global || {};
+  cfg.global.copy_ratio = Number(document.getElementById("copy_ratio").value || 0);
+  cfg.global.max_per_trade = Number(document.getElementById("max_per_trade").value || 0);
+  cfg.global.max_per_market = Number(document.getElementById("max_per_market").value || 0);
+  cfg.global.daily_cap = Number(document.getElementById("daily_cap").value || 0);
+  cfg.global.min_source_trade = Number(document.getElementById("min_source_trade").value || 0);
+  document.querySelectorAll(".trEnabled").forEach(el => cfg.traders[Number(el.dataset.i)].enabled = el.checked);
+  document.querySelectorAll(".trRatio").forEach(el => cfg.traders[Number(el.dataset.i)].copy_ratio = Number(el.value || 0));
+  document.querySelectorAll(".trMax").forEach(el => cfg.traders[Number(el.dataset.i)].max_per_trade = Number(el.value || 0));
+  return cfg;
+}
+
+async function saveRemoteConfig() {
+  await api("/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collectRemoteConfig()) });
+  await reloadAll();
+}
+
+function feedBadge(stage) {
+  const s = String(stage || "");
+  if (s.includes("executed")) return '<span class="badge">已执行</span>';
+  if (s.includes("pending")) return '<span class="badge">待执行</span>';
+  if (s.includes("reject")) return '<span class="badge">已拒绝</span>';
+  return '<span class="badge">收到</span>';
+}
+
+function fillRemoteState(state, health) {
+  document.getElementById("mHealth").textContent = health?.ok ? (health.dryRun ? "演练模式" : "实盘模式") : "异常";
+  document.getElementById("mMode").textContent = ({manual:"手动",semi:"半自动",auto:"自动"}[remoteConfig?.mode] || "-");
+  document.getElementById("mReceived").textContent = state?.metrics?.received ?? 0;
+  document.getElementById("mExecuted").textContent = state?.metrics?.executed ?? 0;
+  document.getElementById("mPending").textContent = (state?.pending || []).length;
+  document.getElementById("feed").innerHTML = (state?.feed || []).slice(0, 160).map(x => `
+    <div class="item">
+      <div style="display:flex;justify-content:space-between;gap:8px"><div><strong>${esc(zhName(x.traderName || ""))}</strong> ${feedBadge(x.stage)}</div><div class="small">${dt(x.at)}</div></div>
+      <div>${esc(x.marketSlug || "")}</div>
+      <div class="small">${esc(x.side || x.positionSide || "")} / ${esc(x.action || "")} · 金额 ${x.amount ?? x.copyAmount ?? 0} · 价格 ${x.price ?? 0}</div>
+      <div class="small mono">${esc(x.traderAddress || "")}</div>
+    </div>`).join("") || '<div class="small">暂无数据</div>';
+  document.getElementById("pendingTable").innerHTML = (state?.pending || []).map((o, i) => `
+    <tr><td>${i}</td><td>${esc(zhName(o.traderName || ""))}</td><td>${esc(o.marketSlug || "")}</td><td>${esc(o.positionSide || "")} / ${esc(o.action || "")}</td><td>${o.copyAmount ?? 0}</td><td><button onclick="executeIndex(${i})">执行</button></td></tr>`).join("") || '<tr><td colspan="6" class="small">暂无</td></tr>';
+  document.getElementById("executedTable").innerHTML = (state?.executed || []).slice(0, 100).map(e => `
+    <tr><td>${esc(zhName(e.order?.traderName || ""))}</td><td>${esc(e.order?.marketSlug || "")}</td><td>${esc(e.order?.positionSide || "")} / ${esc(e.order?.action || "")}</td><td>${e.order?.copyAmount ?? 0}</td><td>${dt(e.at)}</td></tr>`).join("") || '<tr><td colspan="5" class="small">暂无</td></tr>';
+  document.getElementById("rejectedTable").innerHTML = (state?.rejected || []).slice(0, 100).map(r => `
+    <tr><td>${esc(zhName(r.signal?.traderName || r.order?.traderName || ""))}</td><td>${esc(r.signal?.marketSlug || r.order?.marketSlug || "")}</td><td>${esc(r.reason || "")}</td><td>${dt(r.at)}</td></tr>`).join("") || '<tr><td colspan="4" class="small">暂无</td></tr>';
+}
+
+async function sendSignal() {
+  try {
+    const body = JSON.parse(document.getElementById("signalBox").value);
+    const out = await api("/signal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    document.getElementById("signalOut").textContent = JSON.stringify(out, null, 2);
+    await reloadAll();
+  } catch (err) {
+    document.getElementById("signalOut").textContent = err.message;
+  }
+}
+async function executeIndex(i) { await api("/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ index: i }) }); await reloadAll(); }
+async function resetRemoteState() { if (!confirm("确定要清空状态吗？")) return; await api("/reset", { method: "POST" }); await reloadAll(); }
+
+async function reloadAll() {
+  if (!BASE) return;
+  try {
+    const [health, cfg, state] = await Promise.all([api("/health"), api("/config"), api("/state")]);
+    setConnDot(true);
+    fillRemoteConfig(cfg);
+    fillRemoteState(state, health);
+  } catch {
+    setConnDot(false);
+    document.getElementById("mHealth").textContent = "连接失败";
+  }
+}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+}
+connect();
+</script>
+</body>
+</html>
